@@ -1,0 +1,78 @@
+library(readr)
+library(readtext)
+library(rgdal)
+library(stringr)
+library(foreach)
+
+
+#point the folder where alla the data you obtained from https://simc.arpae.it/dext3r/ are stored (nothing else should be saved in that folder)
+stazf<-
+
+
+tuttoQuanto<-NULL
+for(query in dir(stazf,pattern="dexter*")){
+	righe<-readLines(paste(stazf,query,sep=""))
+	bianche<-which(righe=="")
+	inizi<-bianche+1
+	libro<-matrix(c(inizi,c(bianche[-1]-1,length(righe))),ncol=2)
+	libro<-libro[libro[,2]>=libro[,1],]
+	libro<-libro[-nrow(libro),]
+	bibbia<-libro[nrow(libro),]
+	libro<-libro[-nrow(libro),]
+	libro<-libro[(libro[,2]-libro[,1])>3,]
+	
+	tuttiDati<-foreach(giro=seq(1,nrow(libro)),.export=c("libro","righe","bibbia"),.combine="rbind")%dopar%{
+		tmin<-NA
+		tmax<-NA
+		rain<-NA
+		staz<-righe[libro[giro,1]]
+		serie<-libro[giro,2]-(libro[giro,1]+1)
+		qualchedato<-read.csv(text=righe[seq(libro[giro,1]+1,libro[giro,2])])
+		qualchedato[,1]<-gsub(' +.*',"",as.character(qualchedato[,1]))
+		qualchedato[,2]<-NULL
+		names(qualchedato)[1]<-"giorno"
+		if(any(grepl(toupper("emperatura"),toupper(names(qualchedato))))){
+			temperature<-which(grepl(toupper("emperatura"),toupper(names(qualchedato))))
+			 try(tmaxima<-which(grepl(toupper("assima"),toupper(names(qualchedato)))),silent=T)
+			 try(tmaxima<-tmaxima[tmaxima %in% temperature],silent=T)
+			 try(tminima<-which(grepl(toupper("inima"),toupper(names(qualchedato)))),silent=T)
+			 try(tminima<-tminima[tminima %in% temperature],silent=T)
+			 try(names(qualchedato)[tmaxima]<-"Tmax",silent=T)
+			 try(names(qualchedato)[tminima]<-"Tmin",silent=T)
+			 if(any("Tmax" %in% names(qualchedato))){
+				tmax<-qualchedato$Tmax
+			}
+			if(any("Tmin"%in% names(qualchedato))){
+				tmin<-qualchedato$Tmin
+			}
+			 
+		}
+		if(any(c(grepl(toupper("ecipitazione"),toupper(names(qualchedato))),grepl(toupper("iogg"),toupper(names(qualchedato)))))){
+			names(qualchedato)[which(grepl(toupper("ecipitazione"),toupper(names(qualchedato)))|grepl(toupper("iogg"),toupper(names(qualchedato))))]<-"rain"
+			rain<-qualchedato$rain
+		}
+
+		return(data.frame(stazione=staz,Data=qualchedato$giorno,Tmin=tmin,Tmax=tmax,Rain=rain))
+	}
+	bible<-read.csv(text=righe[seq(bibbia[1],bibbia[2])])
+	
+	results<-merge(tuttiDati,bible,by.x="stazione",by.y=names(bible)[1])
+	
+	tuttoQuanto<-rbind(tuttoQuanto,results)
+}
+	
+names(tuttoQuanto)[12]<-"longitudine"
+names(tuttoQuanto)[13]<-"latitudine"
+tuttoQuanto$longitudine<-as.numeric(as.character(tuttoQuanto$longitudine))
+tuttoQuanto$latitudine<-as.numeric(as.character(tuttoQuanto$latitudine))
+ arpae<-SpatialPointsDataFrame(coords=cbind(tuttoQuanto$longitudine,tuttoQuanto$latitudine),data=tuttoQuanto[,-c(11,12)],proj4string=CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+
+
+
+#arpae contains all tha data stoder as points located at the station coordinates and having date tmin, tmax and rain accordingly to that station.
+
+#you can export it as .shp (for simpler visualization in qgis) using:
+#not run:
+writeOGR(arpae,dns=".","arpae",driver="ESRI Shapefile")
+

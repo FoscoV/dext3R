@@ -21,38 +21,43 @@ for(query in dir(stazf,pattern="dexter*")){
 	libro<-libro[-nrow(libro),]
 	libro<-libro[(libro[,2]-libro[,1])>3,]
 	
-	tuttiDati<-foreach(giro=seq(1,nrow(libro)),.export=c("libro","righe","bibbia"),.combine="rbind")%dopar%{
+	tuttiDati<-foreach(stazione=unique(staz),.export=c("staz","libro","righe","bibbia"),.combine="rbind")%dopar%{
 		tmin<-NA
 		tmax<-NA
 		rain<-NA
-		staz<-righe[libro[giro,1]]
-		serie<-libro[giro,2]-(libro[giro,1]+1)
-		qualchedato<-read.csv(text=righe[seq(libro[giro,1]+1,libro[giro,2])])
-		qualchedato[,1]<-gsub(' +.*',"",as.character(qualchedato[,1]))
-		qualchedato[,2]<-NULL
-		names(qualchedato)[1]<-"giorno"
-		if(any(grepl(toupper("emperatura"),toupper(names(qualchedato))))){
-			temperature<-which(grepl(toupper("emperatura"),toupper(names(qualchedato))))
-			 try(tmaxima<-which(grepl(toupper("assima"),toupper(names(qualchedato)))),silent=T)
-			 try(tmaxima<-tmaxima[tmaxima %in% temperature],silent=T)
-			 try(tminima<-which(grepl(toupper("inima"),toupper(names(qualchedato)))),silent=T)
-			 try(tminima<-tminima[tminima %in% temperature],silent=T)
-			 try(names(qualchedato)[tmaxima]<-"Tmax",silent=T)
-			 try(names(qualchedato)[tminima]<-"Tmin",silent=T)
-			 if(any("Tmax" %in% names(qualchedato))){
-				tmax<-qualchedato$Tmax
+		#
+		rigiro<-which(staz==stazione)
+		qualchedato<-NULL
+		for(giro in rigiro){
+			serie<-libro[giro,2]-(libro[giro,1]+1)
+			qualchedato<-read.csv(text=righe[seq(libro[giro,1]+1,libro[giro,2])])
+			qualchedato[,1]<-gsub(' +.*',"",as.character(qualchedato[,1]))
+			qualchedato[,2]<-NULL
+			names(qualchedato)[1]<-"giorno"
+			if(any(grepl(toupper("emperatura"),toupper(names(qualchedato))))){
+				temperature<-which(grepl(toupper("emperatura"),toupper(names(qualchedato))))
+				 try(tmaxima<-which(grepl(toupper("assima"),toupper(names(qualchedato)))),silent=T)
+				 try(tmaxima<-tmaxima[tmaxima %in% temperature],silent=T)
+				 try(tminima<-which(grepl(toupper("inima"),toupper(names(qualchedato)))),silent=T)
+				 try(tminima<-tminima[tminima %in% temperature],silent=T)
+				 try(names(qualchedato)[tmaxima]<-"Tmax",silent=T)
+				 try(names(qualchedato)[tminima]<-"Tmin",silent=T)
+				 if(any("Tmax" %in% names(qualchedato))){
+					tmax<-qualchedato$Tmax
+				}
+				if(any("Tmin"%in% names(qualchedato))){
+					tmin<-qualchedato$Tmin
+				}
+				 
 			}
-			if(any("Tmin"%in% names(qualchedato))){
-				tmin<-qualchedato$Tmin
+			if(any(c(grepl(toupper("ecipitazione"),toupper(names(qualchedato))),grepl(toupper("iogg"),toupper(names(qualchedato)))))){
+				names(qualchedato)[which(grepl(toupper("ecipitazione"),toupper(names(qualchedato)))|grepl(toupper("iogg"),toupper(names(qualchedato))))]<-"rain"
+				rain<-qualchedato$rain
 			}
-			 
+			
+			
 		}
-		if(any(c(grepl(toupper("ecipitazione"),toupper(names(qualchedato))),grepl(toupper("iogg"),toupper(names(qualchedato)))))){
-			names(qualchedato)[which(grepl(toupper("ecipitazione"),toupper(names(qualchedato)))|grepl(toupper("iogg"),toupper(names(qualchedato))))]<-"rain"
-			rain<-qualchedato$rain
-		}
-
-		return(data.frame(stazione=staz,Data=qualchedato$giorno,Tmin=tmin,Tmax=tmax,Rain=rain))
+		return(data.frame(stazione=stazione,Data=qualchedato$giorno,Tmin=tmin,Tmax=tmax,Rain=rain))
 	}
 	bible<-read.csv(text=righe[seq(bibbia[1],bibbia[2])])
 	
